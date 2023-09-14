@@ -1,0 +1,32 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "Dispatch Job to On-Premises",
+  "States": {
+    "Dispatch Job to On-Premises": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${LambdaNotifierToWorkerArn}",
+        "Payload": {
+          "Input.$": "$",
+          "TaskToken.$": "$$.Task.Token"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "End": true,
+      "ResultPath": "$.lambdaOutput"
+    }
+  }
+}

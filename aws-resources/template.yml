@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  step-functions-progress-tracking-app
+
+  SAM Template for step-functions-progress-tracking-app to demonstrate progress tracking of AWS Step Functions.
+  It implements Websocket API with management Lambda functions and DynamoDB, mock functions to emulate long
+  running tasks, and a state machine implementation.
+
+Globals:
+  Function:
+    Runtime: python3.9
+    MemorySize: 256
+    Timeout: 15
+
+Parameters:
+  MQTTClientID:
+    Type: String
+    Default: mqtt-container-client
+    Description: REQUIRED The name of container client on-premises
+    MinLength: 3
+    MaxLength: 32
+    AllowedPattern: ^[A-Za-z-]+$
+    ConstraintDescription: Capital or small letters, dash sign.
+  MQTTContainerNameInIoT:
+    Type: String
+    Default: mqtt-container-client
+    Description: REQUIRED The name of IoT Thing, which on-premise container will use
+    MinLength: 3
+    MaxLength: 32
+    AllowedPattern: ^[A-Za-z-]+$
+    ConstraintDescription: Capital or small letters, dash sign.
+  WorkerTopic:
+    Type: String
+    Default: tenant1/to/worker
+    Description: REQUIRED The name of the topic, to which the worker subscribes to
+    MinLength: 3
+    MaxLength: 128
+    AllowedPattern: ^[A-Za-z-/]+$
+    ConstraintDescription: Capital or small letters, dash sign, slash.
+  LambdaTopic:
+    Type: String
+    Default: tenant1/to/lambda
+    Description: REQUIRED The name of the topic, to which the worker submits the result
+    MinLength: 3
+    MaxLength: 128
+    AllowedPattern: ^[A-Za-z-/]+$
+    ConstraintDescription: Capital or small letters, dash sign, slash.
+
+
+Resources:      
+##### Lambda Functions #####
+  SendToWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda_handlers/toWorker
+      Handler: app.lambda_handler
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          WORKER_TOPIC: !Ref WorkerTopic
+      Policies:
+      - Statement:
+        - Sid: PublishToTopic
+          Effect: Allow
+          Action:
+          - iot:Publish
+          Resource: !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/${WorkerTopic}
+  SendToLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda_handlers/toLambda
+      Handler: app.lambda_handler
+      ReservedConcurrentExecutions: 5
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+            - states:SendTaskSuccess
+            - states:SendTaskHeartbeat
+            - states:SendTaskFailure
+          Resource: !GetAtt MqttBasedStateMachine.Arn
+
+##### Step Functions State Machine #####
+  MqttBasedStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      DefinitionUri: statemachine/statemachine.asl.json
+      DefinitionSubstitutions:
+        LambdaNotifierToWorkerArn: !GetAtt SendToWorkerFunction.Arn
+      Type: STANDARD
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource:
+                - !GetAtt SendToWorkerFunction.Arn
+              
+##### IoT Rule ######
+  TaskTokenToLambdaTopicRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: TaskTokenToLambdaTopic
+      TopicRulePayload:
+        RuleDisabled: false
+        Sql: !Sub SELECT * FROM '${LambdaTopic}'
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt SendToLambdaFunction.Arn
+  IoTRuleLambdaInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      SourceArn: !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:rule/${TaskTokenToLambdaTopicRule}
+      Action: lambda:InvokeFunction
+      Principal: iot.amazonaws.com
+      FunctionName: !GetAtt SendToLambdaFunction.Arn
+      SourceAccount: !Ref AWS::AccountId
+
+###### IoT Policy ######
+  IoTToContainerPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: OnPremContainer 
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - iot:Connect
+            Resource:
+              - !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/${MQTTClientID}
+          - Effect: Allow
+            Action: iot:Receive
+            Resource:
+              - !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/${WorkerTopic}
+          - Effect: Allow
+            Action: iot:Subscribe
+            Resource:
+              - !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/${WorkerTopic}
+          - Effect: Allow
+            Action:
+              - iot:Publish
+              - iot:RetainPublish
+            Resource:
+              - !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/${LambdaTopic}
+
+##### IoT Thing (on-prem container) #####
+  OnPremContainer:
+    Type: AWS::IoT::Thing
+    Properties:
+      ThingName: !Ref MQTTContainerNameInIoT
