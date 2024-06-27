@@ -1,15 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
+Description: |
   step-functions-progress-tracking-app
-
-  SAM Template for step-functions-progress-tracking-app to demonstrate progress tracking of AWS Step Functions.
-  It implements Websocket API with management Lambda functions and DynamoDB, mock functions to emulate long
-  running tasks, and a state machine implementation.
+  SAM Template for step-functions-progress-tracking-app to demonstrate progress tracking of AWS Step Functions. It implements Websocket API with management Lambda functions and DynamoDB, mock functions to emulate long running tasks, and a state machine implementation.
 
 Globals:
   Function:
-    Runtime: python3.9
+    Runtime: python3.12
     MemorySize: 256
     Timeout: 15
 
@@ -20,7 +17,7 @@ Parameters:
     Description: REQUIRED The name of container client on-premises
     MinLength: 3
     MaxLength: 32
-    AllowedPattern: ^[A-Za-z-]+$
+    AllowedPattern: ^[A-Za-z0-9-]+$
     ConstraintDescription: Capital or small letters, dash sign.
   MQTTContainerNameInIoT:
     Type: String
@@ -36,7 +33,7 @@ Parameters:
     Description: REQUIRED The name of the topic, to which the worker subscribes to
     MinLength: 3
     MaxLength: 128
-    AllowedPattern: ^[A-Za-z-/]+$
+    AllowedPattern: ^[A-Za-z0-9-\/]+$
     ConstraintDescription: Capital or small letters, dash sign, slash.
   LambdaTopic:
     Type: String
@@ -44,12 +41,11 @@ Parameters:
     Description: REQUIRED The name of the topic, to which the worker submits the result
     MinLength: 3
     MaxLength: 128
-    AllowedPattern: ^[A-Za-z-/]+$
+    AllowedPattern: ^[A-Za-z0-9-\/]+$
     ConstraintDescription: Capital or small letters, dash sign, slash.
 
-
-Resources:      
-##### Lambda Functions #####
+Resources:
+  ##### Lambda Functions #####
   SendToWorkerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -60,12 +56,12 @@ Resources:
         Variables:
           WORKER_TOPIC: !Ref WorkerTopic
       Policies:
-      - Statement:
-        - Sid: PublishToTopic
-          Effect: Allow
-          Action:
-          - iot:Publish
-          Resource: !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/${WorkerTopic}
+        - Statement:
+            - Sid: PublishToTopic
+              Effect: Allow
+              Action:
+                - iot:Publish
+              Resource: !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/${WorkerTopic}
   SendToLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -73,19 +69,18 @@ Resources:
       Handler: app.lambda_handler
       ReservedConcurrentExecutions: 5
       Policies:
-      - Statement:
-        - Effect: Allow
-          Action:
-            - states:SendTaskSuccess
-            - states:SendTaskHeartbeat
-            - states:SendTaskFailure
-          Resource: !GetAtt MqttBasedStateMachine.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:SendTaskSuccess
+                - states:SendTaskHeartbeat
+                - states:SendTaskFailure
+              Resource: !GetAtt MqttBasedStateMachine.Arn
 
-##### Step Functions State Machine #####
+  ##### Step Functions State Machine #####
   MqttBasedStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
-      DefinitionUri: statemachine/statemachine.asl.json
       DefinitionSubstitutions:
         LambdaNotifierToWorkerArn: !GetAtt SendToWorkerFunction.Arn
       Type: STANDARD
@@ -96,8 +91,9 @@ Resources:
                 - lambda:InvokeFunction
               Resource:
                 - !GetAtt SendToWorkerFunction.Arn
-              
-##### IoT Rule ######
+      DefinitionUri: statemachine/statemachine.asl.json
+
+  ##### IoT Rule ######
   TaskTokenToLambdaTopicRule:
     Type: AWS::IoT::TopicRule
     Properties:
@@ -117,11 +113,11 @@ Resources:
       FunctionName: !GetAtt SendToLambdaFunction.Arn
       SourceAccount: !Ref AWS::AccountId
 
-###### IoT Policy ######
+  ###### IoT Policy ######
   IoTToContainerPolicy:
     Type: AWS::IoT::Policy
     Properties:
-      PolicyName: OnPremContainer 
+      PolicyName: OnPremContainer
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -145,7 +141,7 @@ Resources:
             Resource:
               - !Sub arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/${LambdaTopic}
 
-##### IoT Thing (on-prem container) #####
+  ##### IoT Thing (on-prem container) #####
   OnPremContainer:
     Type: AWS::IoT::Thing
     Properties:

@@ -1,12 +1,12 @@
-FROM python:alpine3.11
+FROM python:alpine3.20
 
-ARG ENDPOINT=<IOT_CORE_ENDPOINT_URL>
-ARG CA_FILE=certs/root-CA.crt
-ARG DEVICE_CERT=certs/cert.pem
-ARG PRIVATE_KEY=certs/priv.key
-ARG CLIENT_ID=mqtt-container-client
-ARG SUBSCRIBE_TOPIC=tenant1/to/worker
-ARG SUBMIT_TOPIC=tenant1/to/lambda
+ENV ENDPOINT=a3hizaz7f8jraw-ats.iot.eu-west-1.amazonaws.com
+ENV CA_FILE=certs/root-CA.crt
+ENV DEVICE_CERT=certs/cert.pem
+ENV PRIVATE_KEY=certs/priv.key
+ENV CLIENT_ID=mqtt-container-client
+ENV SUBSCRIBE_TOPIC=tenant1/to/worker
+ENV SUBMIT_TOPIC=tenant1/to/lambda
 
 RUN apk update \
   && apk add --update alpine-sdk make cmake git \

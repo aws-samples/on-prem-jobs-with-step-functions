@@ -6,14 +6,13 @@ import json
 import threading
 
 
-ENDPOINT=os.environ['ENDPOINT']
-CA_FILE=os.environ['CA_FILE']
-DEVICE_CERT=os.environ['DEVICE_CERT']
-PRIVATE_KEY=os.environ['PRIVATE_KEY']
-CLIENT_ID=os.environ['CLIENT_ID']
-SUBSCRIBE_TOPIC=os.environ['SUBSCRIBE_TOPIC']
-SUBMIT_TOPIC=os.environ['SUBMIT_TOPIC']
-
+ENDPOINT = os.environ["ENDPOINT"]
+CA_FILE = os.environ["CA_FILE"]
+DEVICE_CERT = os.environ["DEVICE_CERT"]
+PRIVATE_KEY = os.environ["PRIVATE_KEY"]
+CLIENT_ID = os.environ["CLIENT_ID"]
+SUBSCRIBE_TOPIC = os.environ["SUBSCRIBE_TOPIC"]
+SUBMIT_TOPIC = os.environ["SUBMIT_TOPIC"]
 
 received_all_event = threading.Event()
 
@@ -63,23 +62,14 @@ def on_message_received(topic, payload, dup, qos, retain, **kwargs):
 
     except Exception as e:
         print(e)
-        resp = {
-            "result": res,
-            "TaskToken": taskToken,
-            "exception": type(e).__name__
-        }
+        resp = {"result": res, "TaskToken": taskToken, "exception": type(e).__name__}
         message_json = json.dumps(resp)
-        mqtt_connection.publish(
-            topic=SUBMIT_TOPIC, payload=message_json, qos=qos
-        )
+        mqtt_connection.publish(topic=SUBMIT_TOPIC, payload=message_json, qos=qos)
         return
-    
+
     try:
         print("Publishing messages to topic {}...".format(SUBMIT_TOPIC))
-        resp = {
-            "result": res,
-            "TaskToken": taskToken
-        }
+        resp = {"result": res, "TaskToken": taskToken}
         message_json = json.dumps(resp)
         print(message_json)
         mqtt_connection.publish(
@@ -87,15 +77,9 @@ def on_message_received(topic, payload, dup, qos, retain, **kwargs):
         )
     except Exception as e:
         print(e)
-        resp = {
-            "result": res,
-            "TaskToken": taskToken,
-            "exception": type(e).__name__
-        }
+        resp = {"result": res, "TaskToken": taskToken, "exception": type(e).__name__}
         message_json = json.dumps(resp)
-        mqtt_connection.publish(
-            topic=SUBMIT_TOPIC, payload=message_json, qos=qos
-        )
+        mqtt_connection.publish(topic=SUBMIT_TOPIC, payload=message_json, qos=qos)
 
 
 # Callback when the connection successfully connects
@@ -105,7 +89,7 @@ def on_connection_success(connection, callback_data):
             "Connection Successful with return code: {} session present: {}".format(
                 callback_data.return_code, callback_data.session_present
             )
-        )        
+        )
 
 
 # Callback when a connection attempt fails
@@ -120,41 +104,46 @@ def on_connection_closed(connection, callback_data):
 
 
 if __name__ == "__main__":
-    # Create a MQTT connection from the command line data
-    mqtt_connection = mqtt_connection_builder.mtls_from_path(
-        endpoint=ENDPOINT,
-        cert_filepath=DEVICE_CERT,
-        pri_key_filepath=PRIVATE_KEY,
-        ca_filepath=CA_FILE,
-        client_id=CLIENT_ID,
-        clean_session=False,
-        keep_alive_secs=30,
-        on_connection_success=on_connection_success,
-        on_connection_failure=on_connection_failure,
-        on_connection_interrupted=on_connection_interrupted,
-        on_connection_resumed=on_connection_resumed,
-        on_connection_closed=on_connection_closed
-    )
+    try:
+        # Create a MQTT connection from the command line data
+        mqtt_connection = mqtt_connection_builder.mtls_from_path(
+            endpoint=ENDPOINT,
+            cert_filepath=DEVICE_CERT,
+            pri_key_filepath=PRIVATE_KEY,
+            ca_filepath=CA_FILE,
+            client_id=CLIENT_ID,
+            clean_session=False,
+            keep_alive_secs=30,
+            on_connection_success=on_connection_success,
+            on_connection_failure=on_connection_failure,
+            on_connection_interrupted=on_connection_interrupted,
+            on_connection_resumed=on_connection_resumed,
+            on_connection_closed=on_connection_closed,
+        )
 
-    print(
-        f"Connecting to {ENDPOINT} with client ID '{CLIENT_ID}'..."
-    )
-    connect_future = mqtt_connection.connect()
+        print(f"Connecting to {ENDPOINT} with client ID '{CLIENT_ID}'...")
+        connect_future = mqtt_connection.connect()
 
-    # Future.result() waits until a result is available
-    connect_future.result()
-    print("Connected!")
+        # Future.result() waits until a result is available
+        connect_future.result()
+        print("Connected!")
+    except Exception as e:
+        print("Connection failed with exception: {}".format(e))
 
-    subscribe_topic = SUBSCRIBE_TOPIC
+    try:
+        # Subscribe
+        subscribe_topic = SUBSCRIBE_TOPIC
+        print("Subscribing to topic '{}'...".format(subscribe_topic))
+        subscribe_future, packet_id = mqtt_connection.subscribe(
+            topic=subscribe_topic,
+            qos=mqtt.QoS.AT_LEAST_ONCE,
+            callback=on_message_received,
+        )
 
-    # Subscribe
-    print("Subscribing to topic '{}'...".format(subscribe_topic))
-    subscribe_future, packet_id = mqtt_connection.subscribe(
-        topic=subscribe_topic, qos=mqtt.QoS.AT_LEAST_ONCE, callback=on_message_received
-    )
-
-    subscribe_result = subscribe_future.result()
-    print("Subscribed with {}".format(str(subscribe_result["qos"])))
+        subscribe_result = subscribe_future.result()
+        print("Subscribed with {}".format(str(subscribe_result)))
+    except Exception as e:
+        print("Subscribe failed: {}".format(e))
 
     # Wait for all messages to be received.
     # This waits forever if count was set to 0.
