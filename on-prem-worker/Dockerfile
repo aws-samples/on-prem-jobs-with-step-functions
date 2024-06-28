@@ -1,6 +1,6 @@
 FROM python:alpine3.20
 
-ENV ENDPOINT=a3hizaz7f8jraw-ats.iot.eu-west-1.amazonaws.com
+ENV ENDPOINT=<IOT_CORE_ENDPOINT_URL>
 ENV CA_FILE=certs/root-CA.crt
 ENV DEVICE_CERT=certs/cert.pem
 ENV PRIVATE_KEY=certs/priv.key
